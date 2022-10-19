@@ -1,0 +1,757 @@
+--11.
+
+
+--1
+--Afisati numele si numarul de vaccinuri facute ale animalelor ce fac parte din centrele de adoptie 
+--ce se afla in orasele care au incepand cu a 3-a litera, subsirul "vodari", fara nimic altceva dupa acesta.
+select a.nume, cv.nr_vaccinuri
+from carnet_vaccinuri cv join animal a on (cv.id_animal = a.id_animal)
+join centru_de_adoptie ca on (a.id_centru = ca.id_centru)
+join oras o on ( ca.id_oras = o.id_oras)
+where substr(o.nume, 3) = 'vodari';
+
+--join
+--filtrare la nivel de linii
+--o functie pe siruri de caractere (substr)
+
+--2
+--Afisati numele centrelor de adoptie, orasele din care fac parte si tara, unde numele tarii scris cu litere mari este "ROMANIA"
+select c.nume centru, o.nume oras, t.nume tara
+from centru_de_adoptie c join oras o on (c.id_oras = o.id_oras)
+join tara t on (o.id_tara = t.id_tara)
+where t.nume in (select t2.nume
+                from centru_de_adoptie c2 join oras o2 on (c2.id_oras = o2.id_oras)
+                join tara t2 on (o2.id_tara = t2.id_tara)                
+                where upper(t2.nume)= 'ROMANIA');
+
+--subcerere nesincronizata
+--o functie pe siruri de caractere(upper)
+
+--3
+--Afisati numele animalelor, numele bolii de care sufera, gravitatea bolii si cate tipuri de hrana mananca pentru
+--animalele ale caror varsta este mai mica sau egala cu gravitatea bolii
+select a.nume, b.nume, b.gravitate, count(h.nume)
+from animal a, sufera s, boala b, mananca m, hrana_animale h
+where a.id_animal = s.id_animal and s.id_boala = b.id_boala and a.id_animal = m.id_animal and m.id_hrana = h.id_hrana and
+a.varsta in (select b2.gravitate
+                from animal a2 join sufera s2 on (a2.id_animal = s2.id_animal)
+                join boala b2 on (s2.id_boala = b2.id_boala)
+                where b2.gravitate <= a.varsta)
+group by a.nume, b.nume, b.gravitate
+order by b.gravitate desc;
+
+--subcerere sincronizata
+--ordonare
+--grupari de date, functii grup, filtrare la nivel de grupuri
+
+
+--4
+--Afisati numele animalului(in cazul in care nu are, afiseaza "nu are nume"), data urmatorului vaccin, si un mesaj de tipul:
+--"Vaccinul trebuie facut" daca data urmatorului vaccin se afla dupa doua luni si 5 zile de la data curenta,
+--"Vaccinul trebuie trecut in carnetul de vaccinuri" daca data urmatorului vaccin se afla inainte de doua luni si 5 zile de la data curenta,
+--"Este ziua vaccinului" in oricare alt caz. Vor fi afisate aceste lucruri pentru animalele
+--care au data urmatorului vaccin dupa ultima zi a lunii curente.
+select nvl(a.nume, 'nu are nume'), cv.data_urmatorului_vaccin,
+case
+when cv.data_urmatorului_vaccin > add_months(sysdate +5, 2) then 'Vaccinul trebuie facut'
+when cv.data_urmatorului_vaccin < add_months(sysdate +5, 2) then 'Vaccinul trebuie trecut in carnetul de vaccinuri'
+else 'Este ziua vaccinului'
+end as mesaj
+from animal a join carnet_vaccinuri cv on (a.id_animal = cv.id_animal)
+where cv.data_urmatorului_vaccin >= last_day(sysdate);
+                                    
+--case
+--2 functii calendaristice(add_months, last_day)
+--nvl    
+
+
+--5
+--Afisati numele, prenumele si un mesaj de tipul:
+--"Are salariul cel mai mic" pentru angajatii care au salariul cel mai mic dintre toate joburile,
+--"Are salariul cel mai mare" pentru angajatii care au salariul cel mai mare dintre toate joburile,
+--"Are salariul mediu" pentru angajatii care au salariul egal cu media salariilor dintre toate joburile,
+--"Nu conteaza" in celelalte cazuri. Aceste mesaje se afiseaza pentru angajatii din departamentul cu cele mai putine persoane.
+--Pentru a stabili departamentul cu cele mai putine persoane, se va folosi un bloc de cerere.
+with angajati_putini(valoare) as
+(select min(nr_persoane)
+from departament)
+select a.nume, a.prenume, decode(a.salariu, (select min(salariu) from job), 'Are salariul cel mai mic',
+(select max(salariu) from job), 'Are salariul cel mai mare', 
+(select avg(salariu) from job), 'Are salariul mediu', 'Nu conteaza salariul')
+from angajat a join job j on a.id_job = j.id_job
+join departament d on j.id_departament = d.id_departament, angajati_putini
+where d.nr_persoane = angajati_putini.valoare;
+
+--decode
+--bloc cerere
+--functii grup
+
+
+--12.
+
+
+--1
+--Sa se majoreze salariul angajatilor care lucreaza ca doctori cu 15%.
+--Sa se anuleze modificarile.
+update angajat
+set salariu = salariu*1.15
+where salariu in (select salariu
+                    from angajat
+                    where id_job in (select id_job
+                                    from job
+                                    where nume = 'Chirurg veterinar'));  
+rollback;
+
+
+--2
+--Sa se stearga inregistrarile din tabelul oras, acolo unde nu exista centre de adoptie pentru animale.
+--Sa se anuleze modificarile.
+delete
+from oras
+where id_oras not in(select unique id_oras
+                    from centru_de_adoptie);
+
+rollback;
+
+
+--3
+--Sa se creasca doza pe zi cu una la medicamentele pentru bolile cu gravitate 10.
+--Sa se anuleze modificarile.
+
+update medicament
+set doza_pe_zi = doza_pe_zi +1
+where id_medicament in (select id_medicament
+                        from se_treateaza
+                        where id_boala in (select id_boala
+                                            from boala
+                                            where gravitate = 10));
+rollback;
+
+
+--13.
+
+create sequence seq_tara
+increment by 1
+start with 1
+maxvalue 10000
+nocycle;
+
+insert into tara
+values(seq_tara.nextval, 'Romania');
+
+insert into tara
+values(seq_tara.nextval, 'Franta');
+
+insert into tara
+values(seq_tara.nextval, 'Germania');
+
+insert into tara
+values(seq_tara.nextval, 'Italia');
+
+insert into tara
+values(seq_tara.nextval, 'Bulgaria');
+
+insert into tara
+values(seq_tara.nextval, 'Ucraina');
+
+insert into tara
+values(seq_tara.nextval, 'Spania');
+
+insert into tara
+values(seq_tara.nextval, 'Ungaria');
+
+insert into tara
+values(seq_tara.nextval, 'Polonia');
+
+insert into tara
+values(seq_tara.nextval, 'Danemarca');
+
+commit;
+
+create sequence seq_oras
+increment by 1
+start with 1
+maxvalue 10000
+nocycle;
+
+insert into oras
+values(seq_oras.nextval, 'Constanta', 1);
+
+insert into oras
+values(seq_oras.nextval, 'Craiova', 1);
+
+insert into oras
+values(seq_oras.nextval, 'Roma', 4);
+
+insert into oras
+values(seq_oras.nextval, 'Barcelona', 7);
+
+insert into oras
+values(seq_oras.nextval, 'Navodari', 1);
+
+insert into oras
+values(seq_oras.nextval, 'Bucuresti', 1);
+
+insert into oras
+values(seq_oras.nextval, 'Verona', 4);
+
+insert into oras
+values(seq_oras.nextval, 'Timisoara', 1);
+
+insert into oras
+values(seq_oras.nextval, 'Alba-Iulia', 1);
+
+insert into oras
+values(seq_oras.nextval, 'Iasi', 1);
+
+commit;
+
+
+create sequence seq_centru
+increment by 1
+start with 1
+maxvalue 10000
+nocycle;
+
+insert into centru_de_adoptie
+values(seq_centru.nextval, 'Animalutele fericite', TO_DATE('12-03-2004', 'dd-mm-yyyy'), 100, 2);
+
+insert into centru_de_adoptie
+values(seq_centru.nextval, 'Adopta un prieten', TO_DATE('02-11-2010', 'dd-mm-yyyy'), 150, 6);
+
+insert into centru_de_adoptie
+values(seq_centru.nextval, 'Animalul tau', TO_DATE('25-06-2012', 'dd-mm-yyyy'), 98, 10);
+
+insert into centru_de_adoptie
+values(seq_centru.nextval, 'Adopta-ma!', TO_DATE('16-09-2006', 'dd-mm-yyyy'), 200, 4);
+
+insert into centru_de_adoptie
+values(seq_centru.nextval, 'Animale prietenoase', TO_DATE('05-10-2013', 'dd-mm-yyyy'), 59, 5);
+
+insert into centru_de_adoptie
+values(seq_centru.nextval, 'Animalutele fericite', TO_DATE('12-03-2004', 'dd-mm-yyyy'), 100, 2);
+
+commit;
+
+
+create sequence seq_hrana
+increment by 1
+start with 1
+maxvalue 10000
+nocycle;
+
+insert into hrana_animale
+values(seq_hrana.nextval, 'Chonk', 300, 1);
+
+insert into hrana_animale
+values(seq_hrana.nextval, 'Cocomel', 579, 2);
+
+insert into hrana_animale
+values(seq_hrana.nextval, 'Papbun', 400, 3);
+
+insert into hrana_animale
+values(seq_hrana.nextval, 'Falrel', 280, 4);
+
+insert into hrana_animale
+values(seq_hrana.nextval, 'Varel', 600, 5);
+
+insert into hrana_animale
+values(seq_hrana.nextval, 'Chonk', 250, 2);
+
+insert into hrana_animale
+values(seq_hrana.nextval, 'Chonk', 190, 5);
+
+insert into hrana_animale
+values(seq_hrana.nextval, 'Cocomel', 398, 1);
+
+insert into hrana_animale
+values(seq_hrana.nextval, 'Cocomel', 400, 4);
+
+insert into hrana_animale
+values(seq_hrana.nextval, 'Varel', 387, 3);
+
+insert into hrana_animale
+values(seq_hrana.nextval, 'Papbun', 376, 1);
+
+insert into hrana_animale
+values(seq_hrana.nextval, 'Falrel', 578, 5);
+
+commit;
+
+
+create sequence seq_animal
+increment by 1
+start with 1
+maxvalue 10000
+nocycle;
+
+insert into animal
+values(seq_animal.nextval, 'British', 3, 'Mimi', 2, 'are');
+
+insert into animal
+values(seq_animal.nextval, 'Scotish', 1, 'Misha', 5, 'nu are');
+
+insert into animal
+values(seq_animal.nextval, 'nu stim', 2, 'Cara', 4,'nu are');
+
+insert into animal
+values(seq_animal.nextval, 'Labrador', 4, 'Rex', 1,'are');
+
+insert into animal
+values(seq_animal.nextval, 'Pug', 1, 'Boni', 3,'nu are');
+
+commit;
+
+
+create sequence seq_vaccin
+increment by 1
+start with 1
+maxvalue 10000
+nocycle;
+
+insert into vaccin
+values(seq_vaccin.nextval, 'Eurican', TO_DATE('12-04-2005', 'dd-mm-yyyy'),1);
+
+insert into vaccin
+values(seq_vaccin.nextval, 'Rabisim', TO_DATE('04-03-2010', 'dd-mm-yyyy'),2);
+
+insert into vaccin
+values(seq_vaccin.nextval, 'Purevax', TO_DATE('24-11-2006', 'dd-mm-yyyy'),3);
+
+insert into vaccin
+values(seq_vaccin.nextval, 'Primodog', TO_DATE('15-12-2013', 'dd-mm-yyyy'),4);
+
+insert into vaccin
+values(seq_vaccin.nextval, 'Eurican', TO_DATE('02-09-2012', 'dd-mm-yyyy'),5);
+
+
+commit;
+
+
+create sequence seq_carnet
+increment by 1
+start with 1
+maxvalue 10000
+nocycle;
+
+insert into carnet_vaccinuri
+values(seq_carnet.nextval, 1, 3, 1, TO_DATE('23-07-2022', 'dd-mm-yyyy'));
+
+insert into carnet_vaccinuri
+values(seq_carnet.nextval, 2, 1, 3, TO_DATE('12-09-2022', 'dd-mm-yyyy'));
+
+insert into carnet_vaccinuri
+values(seq_carnet.nextval, 3, 5, 6, TO_DATE('15-10-2022', 'dd-mm-yyyy'));
+
+insert into carnet_vaccinuri
+values(seq_carnet.nextval, 4, 2, 2, TO_DATE('13-11-2022', 'dd-mm-yyyy'));
+
+insert into carnet_vaccinuri
+values(seq_carnet.nextval, 5, 4, 1, TO_DATE('25-08-2022', 'dd-mm-yyyy'));
+
+commit;
+
+create sequence seq_boala
+increment by 1
+start with 1
+maxvalue 10000
+nocycle;
+
+insert into boala
+values(seq_boala.nextval, 'Parazitoza', 3);
+
+insert into boala
+values(seq_boala.nextval, 'Salmoneloza', 6);
+
+insert into boala
+values(seq_boala.nextval, 'Stenoza Aortica', 10);
+
+insert into boala
+values(seq_boala.nextval, 'Toxopalsmoza', 4);
+
+insert into boala
+values(seq_boala.nextval, 'Otita', 5);
+
+commit;
+
+
+create sequence seq_medicament
+increment by 1
+start with 1
+maxvalue 10000
+nocycle;
+
+insert into medicament
+values(seq_medicament.nextval, 'Brufil', 3);
+
+insert into medicament
+values(seq_medicament.nextval, 'Iosman', 2);
+
+insert into medicament
+values(seq_medicament.nextval, 'Calmarin', 1);
+
+insert into medicament
+values(seq_medicament.nextval, 'Maldon', 1);
+
+insert into medicament
+values(seq_medicament.nextval, 'Aurilo', 2);
+
+commit;
+
+
+create sequence seq_personal
+increment by 1
+start with 1
+maxvalue 10000
+nocycle;
+
+insert into personal
+values(seq_personal.nextval, 100, 1300, 3000, 1);
+
+insert into personal
+values(seq_personal.nextval, 210, 1250, 2998, 2);
+
+insert into personal
+values(seq_personal.nextval, 87, 1100, 2500, 3);
+
+insert into personal
+values(seq_personal.nextval, 180, 1400, 3100, 4);
+
+insert into personal
+values(seq_personal.nextval, 150, 1247, 2876, 5);
+
+commit;
+
+
+create sequence seq_departament
+increment by 1
+start with 1
+maxvalue 10000
+nocycle;
+
+insert into departament
+values(seq_departament.nextval, 'Curatenie',30, 1300, 1400, 1);
+
+insert into departament
+values(seq_departament.nextval, 'Curatenie',25, 1250, 1300, 2);
+
+insert into departament
+values(seq_departament.nextval, 'Curatenie',15, 1100, 1278, 3);
+
+insert into departament
+values(seq_departament.nextval, 'Curatenie',40, 1400, 1500, 4);
+
+insert into departament
+values(seq_departament.nextval, 'Curatenie',35, 1247, 1350, 5);
+
+insert into departament
+values(seq_departament.nextval, 'Curatenie',30, 1300, 1400, 1);
+
+insert into departament
+values(seq_departament.nextval, 'Doctori',50, 2500, 3000, 1);
+
+insert into departament
+values(seq_departament.nextval, 'Doctori',100, 2480, 2998, 2);
+
+insert into departament
+values(seq_departament.nextval, 'Doctori',45, 2000, 2500, 3);
+
+insert into departament
+values(seq_departament.nextval, 'Doctori',68, 2657, 3100, 4);
+
+insert into departament
+values(seq_departament.nextval, 'Doctori',48, 2150, 2876, 5);
+
+insert into departament
+values(seq_departament.nextval, 'Administratie',20, 1500, 2500, 1);
+
+insert into departament
+values(seq_departament.nextval, 'Administratie',85, 1458, 2480, 2);
+
+insert into departament
+values(seq_departament.nextval, 'Administratie',27, 1376, 2000, 3);
+
+insert into departament
+values(seq_departament.nextval, 'Administratie',72, 2000, 2657, 4);
+
+insert into departament
+values(seq_departament.nextval, 'Administratie',67, 1500, 2150, 5);
+
+commit;
+
+create sequence seq_job
+increment by 1
+start with 1
+maxvalue 10000
+nocycle;
+
+insert into job
+values(seq_job.nextval, 'Ingrijitor animale',1300, 1);
+
+insert into job
+values(seq_job.nextval, 'Om de serviciu',1400, 1);
+
+insert into job
+values(seq_job.nextval, 'Ingrijitor animale',1250, 2);
+
+insert into job
+values(seq_job.nextval, 'Om de serviciu',1300, 2);
+
+insert into job
+values(seq_job.nextval, 'Ingrijitor animale',1100, 3);
+
+insert into job
+values(seq_job.nextval, 'Om de serviciu',1278, 3);
+
+insert into job
+values(seq_job.nextval, 'Ingrijitor animale',1400, 4);
+
+insert into job
+values(seq_job.nextval, 'Om de serviciu',1500, 4);
+
+insert into job
+values(seq_job.nextval, 'Ingrijitor animale',1247, 5);
+
+insert into job
+values(seq_job.nextval, 'Om de serviciu',1350, 5);
+
+insert into job
+values(seq_job.nextval, 'Medic veterinar',2500, 6);
+
+insert into job
+values(seq_job.nextval, 'Chirurg veterinar',3000, 6);
+
+insert into job
+values(seq_job.nextval, 'Medic veterinar',2480, 7);
+
+insert into job
+values(seq_job.nextval, 'Chirurg veterinar',2998, 7);
+
+insert into job
+values(seq_job.nextval, 'Medic veterinar',2000, 8);
+
+insert into job
+values(seq_job.nextval, 'Chirurg veterinar',2500, 8);
+
+insert into job
+values(seq_job.nextval, 'Medic veterinar',2657, 9);
+
+insert into job
+values(seq_job.nextval, 'Chirurg veterinar',3100, 9);
+
+insert into job
+values(seq_job.nextval, 'Medic veterinar',2150, 10);
+
+insert into job
+values(seq_job.nextval, 'Chirurg veterinar',2876, 10);
+
+insert into job
+values(seq_job.nextval, 'Casier',1500, 11);
+
+insert into job
+values(seq_job.nextval, 'Manager',2500, 11);
+
+insert into job
+values(seq_job.nextval, 'Casier',1458, 12);
+
+insert into job
+values(seq_job.nextval, 'Manager',2480, 12);
+
+insert into job
+values(seq_job.nextval, 'Casier',1376, 13);
+
+insert into job
+values(seq_job.nextval, 'Manager',2000, 13);
+
+insert into job
+values(seq_job.nextval, 'Casier',2000, 14);
+
+insert into job
+values(seq_job.nextval, 'Manager',2657, 14);
+
+insert into job
+values(seq_job.nextval, 'Casier',1500, 15);
+
+insert into job
+values(seq_job.nextval, 'Manager',2150, 15);
+
+commit;
+
+
+create sequence seq_angajat
+increment by 1
+start with 1
+maxvalue 10000
+nocycle;
+
+insert into angajat
+values(seq_angajat.nextval, 'Agache','Cosmin', 20,TO_DATE('12-03-2002', 'dd-mm-yyyy'), 1300, 1);
+
+insert into angajat
+values(seq_angajat.nextval, 'Popa','Andrei',  35, TO_DATE('09-10-1987', 'dd-mm-yyyy'),1400, 2);
+
+insert into angajat
+values(seq_angajat.nextval, 'Marius','Andrei', 48, TO_DATE('10-02-1974', 'dd-mm-yyyy'), 1250, 3);
+
+insert into angajat
+values(seq_angajat.nextval, 'Marian','Maria',  40, TO_DATE('20-12-1982', 'dd-mm-yyyy'),1300, 4);
+
+insert into angajat
+values(seq_angajat.nextval, 'Coman','Alexandru',  38, TO_DATE('24-06-1984', 'dd-mm-yyyy'),1100, 5);
+
+insert into angajat
+values(seq_angajat.nextval, 'Popescu','Alina', 28,TO_DATE('30-09-1994', 'dd-mm-yyyy'), 1278, 6);
+
+insert into angajat
+values(seq_angajat.nextval, 'Alexandru','Ion', 50,TO_DATE('14-01-1972', 'dd-mm-yyyy'), 1400, 7);
+
+insert into angajat
+values(seq_angajat.nextval, 'Oleanu','Marian', 43,TO_DATE('08-08-1987', 'dd-mm-yyyy'), 1500, 8);
+
+insert into angajat
+values(seq_angajat.nextval, 'Cornel','Maria', 35,TO_DATE('24-06-1987', 'dd-mm-yyyy'), 1247, 9);
+
+insert into angajat
+values(seq_angajat.nextval, 'Gheorghe','Andrei', 46,TO_DATE('09-06-1976', 'dd-mm-yyyy'), 1350, 10);
+
+insert into angajat
+values(seq_angajat.nextval, 'Stoica','Carina', 40, TO_DATE('05-11-1982', 'dd-mm-yyyy'),2500, 11);
+
+insert into angajat
+values(seq_angajat.nextval, 'Petru','Matei', 45,TO_DATE('13-05-1977', 'dd-mm-yyyy'), 3000, 12);
+
+insert into angajat
+values(seq_angajat.nextval, 'Marius','David', 37,TO_DATE('04-12-1985', 'dd-mm-yyyy'), 2480, 13);
+
+insert into angajat
+values(seq_angajat.nextval, 'Ion','Marian', 50,TO_DATE('09-06-1972', 'dd-mm-yyyy'), 2998, 14);
+
+insert into angajat
+values(seq_angajat.nextval, 'Cornel','Ionut', 34, TO_DATE('25-10-1988', 'dd-mm-yyyy'),2000, 15);
+
+insert into angajat
+values(seq_angajat.nextval, 'Gheorghe','Ana', 39,TO_DATE('29-11-1983', 'dd-mm-yyyy'), 2500, 16);
+
+insert into angajat
+values(seq_angajat.nextval, 'Pavel','George', 51, TO_DATE('03-05-1971', 'dd-mm-yyyy'),2657, 17);
+
+insert into angajat
+values(seq_angajat.nextval, 'Marius','Ion', 30,TO_DATE('08-12-1992', 'dd-mm-yyyy'), 3100, 18);
+
+insert into angajat
+values(seq_angajat.nextval, 'Agache','Maria', 40, TO_DATE('04-10-1982', 'dd-mm-yyyy'),2150, 19);
+
+insert into angajat
+values(seq_angajat.nextval, 'Petru','Costel', 35,TO_DATE('04-05-1987', 'dd-mm-yyyy'), 2876, 20);
+
+insert into angajat
+values(seq_angajat.nextval, 'Alexandru','Ioana', 25, TO_DATE('10-10-1997', 'dd-mm-yyyy'),1500, 21);
+
+insert into angajat
+values(seq_angajat.nextval, 'Ionescu','Carmen', 30,TO_DATE('05-11-1992', 'dd-mm-yyyy'), 2500, 22);
+
+insert into angajat
+values(seq_angajat.nextval, 'Pavel','Mirel', 22,TO_DATE('10-12-2000', 'dd-mm-yyyy'), 1458, 23);
+
+insert into angajat
+values(seq_angajat.nextval, 'Mitrel','Ionut', 28,TO_DATE('12-09-1994', 'dd-mm-yyyy'), 2480, 24);
+
+insert into angajat
+values(seq_angajat.nextval, 'Cordean','Marin', 32,TO_DATE('12-02-1990', 'dd-mm-yyyy'), 1376, 25);
+
+insert into angajat
+values(seq_angajat.nextval, 'Ionescu','Alexandra', 34, TO_DATE('04-03-1988', 'dd-mm-yyyy'),2000, 26);
+
+insert into angajat
+values(seq_angajat.nextval, 'Petre','Alin', 27,TO_DATE('05-11-1995', 'dd-mm-yyyy'), 2000, 27);
+
+insert into angajat
+values(seq_angajat.nextval, 'Cornel','Ioan', 34,TO_DATE('10-10-1988', 'dd-mm-yyyy'), 2657, 28);
+
+insert into angajat
+values(seq_angajat.nextval, 'Ion','Ana', 24,TO_DATE('03-04-1998', 'dd-mm-yyyy'), 1500, 29);
+
+insert into angajat
+values(seq_angajat.nextval, 'Popescu','Elena', 34, TO_DATE('12-10-1988', 'dd-mm-yyyy'),2150, 30);
+
+commit;
+
+
+--14
+
+
+--Crearea unei vizualizari compuse:
+create view angajat_salariu_mediu_sal
+(nume, prenume, salariu, salariul_mediu)
+as select a.nume, a.prenume, a.salariu, avg(j.salariu)
+from angajat a, job j
+where a.id_job = j.id_job
+group by a.nume, a .prenume, a.salariu;
+
+
+--Operatie LMD permisa:
+select * from angajat_salariu_mediu_sal order by salariu;
+
+--Operatie LMD nepermisa:
+delete from angajat_salariu_mediu_sal where prenume = 'Andrei';
+
+--15
+
+--Creare index:
+create index data_aparitie_index on centru_de_adoptie(data_aparitie, nr_animale_adoptate);
+
+
+--Cererea:
+--Sa se afiseze id-ul si numele centrelor de adoptie pentru animale si data in care acestea au aparut pentru centrele care au aparut inainte de 13 mai 2007
+--si care au dat spre adoptie mai mult de 150 de animale.
+select id_centru, nume
+from centru_de_adoptie
+where data_aparitie < to_date('13-05-2007', 'dd-mm-yyyy') and nr_animale_adoptate > 150;
+
+
+--16:
+--Outer-join:
+--Pentru fiecare angajat, sa se afiseze numele, prenumele, departamentul si centrul de adoptie pentru animale la care lucreaza. In cazul in care exista 
+--job-uri fara angajati, se va afisa mesajul "Post liber".
+select decode(a.nume, NULL, 'Post liber', a.nume || ' ' || a.prenume) angajat, d.nume departament, c.nume centru
+from angajat a full outer join job j on (a.id_job = j.id_job)
+full outer join departament d on (j.id_departament = d.id_departament)
+full outer join personal p on (d.id_personal = p.id_personal)
+full outer join centru_de_adoptie c on(p.id_centru = c.id_centru);
+
+
+--Division:
+--1.
+--Sa se afiseze id-ul si numele animalului care are cel putin
+--aceleasi boli precum animalul cu id-ul 2;
+select * from sufera;
+select a.id_animal, a.nume
+from animal a join sufera s on (a.id_animal = s.id_animal)
+where s.id_boala in (select id_boala
+                        from sufera
+                        where id_animal = 2)
+and a.id_animal != 2
+group by a.id_animal, a.nume
+having count(*) = (select count(id_boala)
+                    from sufera
+                    where id_animal = 2 );
+
+--2.
+--Sa se afiseze id-ul si numele animalului care are exact
+--aceleasi boli precum animalul cu id-ul 5.
+select a.id_animal, a.nume
+from animal a join sufera s on (a.id_animal = s.id_animal)
+where s.id_boala in (select id_boala
+                        from sufera
+                        where id_animal = 5)
+and a.id_animal != 5
+group by a.id_animal, a.nume
+having count(*) = (select count(id_boala)
+                    from sufera
+                    where id_animal = 5 )
+minus
+select a.id_animal, a.nume
+from animal a join sufera s on (a.id_animal = s.id_animal)
+where s.id_boala not in (select id_boala
+                        from sufera
+                        where id_animal = 5);
